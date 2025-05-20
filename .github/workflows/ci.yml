@@ -79,4 +79,4 @@ jobs:
     - name: Verify production build
       run: |
         cd frontend
-        npm run dev  # Ensure the app can build successfully
+        npm run build  # Ensure the app can build successfully
