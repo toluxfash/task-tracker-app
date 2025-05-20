@@ -125,7 +125,7 @@ const App = () => {
 
   return (
     <div className="d-flex flex-column align-items-center w-100 m-auto mt-5">
-      <h1 className="mb-4">Task Manager App</h1>
+      <h1 className="mb-4">Task Tracker/Manager App</h1>
 
       <div className="row justify-content-center w-100">
         <div className="col-md-8 mb-4">
