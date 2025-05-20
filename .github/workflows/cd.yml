@@ -1,13 +1,15 @@
 name: CD Pipeline
 
 on:
-  push:
-    branches: 
-      - main       # Production
-      - staging    # Staging
+  workflow_run:
+    workflows: ["CI Pipeline"]  # Waits for CI workflow by name
+    branches: [main, staging]
+    types: [completed]  # Only trigger after CI finishes
 
 jobs:
-  build-and-deploy:
+  deploy:
+    # Only proceed if CI succeeded (not 'failed' or 'cancelled')
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v3
