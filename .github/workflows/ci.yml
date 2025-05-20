@@ -63,11 +63,6 @@ jobs:
         cd frontend
         npm install
         
-    - name: Run ESLint
-      run: |
-        cd frontend
-        npm run lint || echo "Lint errors ignored"  # Will never fail
-        
     - name: Run frontend tests
       run: |
         cd frontend
