@@ -66,7 +66,7 @@ jobs:
     - name: Run ESLint
       run: |
         cd frontend
-        npm run lint || true 
+        npm run lint || echo "Lint errors found but not failing build"  # 👈 Still shows errors but continues 
         
     - name: Run frontend tests
       run: |
