@@ -2,18 +2,18 @@ name: CD Pipeline
 
 on:
   workflow_run:
-    workflows: ["CI Pipeline"]  # Waits for CI workflow by name
+    workflows: ["CI Pipeline"]
     branches: [main, staging]
-    types: [completed]  # Only trigger after CI finishes
+    types: [completed]
 
 jobs:
   deploy:
-    # Only proceed if CI succeeded (not 'failed' or 'cancelled')
     if: ${{ github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v3
     
+    # 1. Build and push images to Docker Hub (unchanged)
     - name: Login to Docker Hub
       uses: docker/login-action@v2
       with:
@@ -30,6 +30,7 @@ jobs:
         docker build -t ${{ secrets.DOCKER_HUB_USERNAME }}/mern-task-frontend:latest ./frontend
         docker push ${{ secrets.DOCKER_HUB_USERNAME }}/mern-task-frontend:latest
         
+    # 2. Environment setup
     - name: Determine environment
       id: set-env
       run: |
@@ -43,6 +44,7 @@ jobs:
           echo "BACKEND_PORT=5001" >> $GITHUB_ENV
         fi
 
+    # 3. Docker Compose deployment
     - name: Deploy to ${{ contains(github.ref, 'main') && 'Production' || 'Staging' }}
       uses: appleboy/ssh-action@master
       with:
@@ -50,11 +52,52 @@ jobs:
         username: ubuntu
         key: ${{ secrets.AWS_EC2_SSH_KEY }}
         script: |
-          docker pull ${{ secrets.DOCKER_HUB_USERNAME }}/mern-task-backend:latest
-          docker pull ${{ secrets.DOCKER_HUB_USERNAME }}/mern-task-frontend:latest
-          docker stop backend || true
-          docker stop frontend || true
-          docker rm backend || true
-          docker rm frontend || true
-          docker run -d --name backend -p ${{ env.BACKEND_PORT }}:5000 ${{ secrets.DOCKER_HUB_USERNAME }}/mern-task-backend:latest
-          docker run -d --name frontend -p ${{ env.FRONTEND_PORT }}:5173 ${{ secrets.DOCKER_HUB_USERNAME }}/mern-task-frontend:latest
+          # Create docker-compose.yml
+          cat > docker-compose.yml << 'EOF'
+          version: "3.8"
+          services:
+            backend:
+              image: ${{ secrets.DOCKER_HUB_USERNAME }}/mern-task-backend:latest
+              container_name: backend
+              env_file: ./backend/.env
+              ports:
+                - "${{ env.BACKEND_PORT }}:5000"
+              restart: unless-stopped
+              healthcheck:
+                test: ["CMD", "curl", "-f", "http://localhost:5000/tasks"]
+                interval: 30s
+                timeout: 10s
+                retries: 3
+                start_period: 5s
+
+            frontend:
+              image: ${{ secrets.DOCKER_HUB_USERNAME }}/mern-task-frontend:latest
+              container_name: frontend
+              env_file: ./frontend/.env
+              ports:
+                - "${{ env.FRONTEND_PORT }}:5173"
+              restart: unless-stopped
+              depends_on:
+                backend:
+                  condition: service_healthy
+              healthcheck:
+                test: ["CMD", "curl", "-f", "http://localhost:5173"]
+                interval: 30s
+                timeout: 10s
+                retries: 10
+                start_period: 30s
+          EOF
+
+          # Create env files from secrets
+          mkdir -p backend frontend
+          echo "${{ secrets.BACKEND_ENV }}" > backend/.env
+          echo "${{ secrets.FRONTEND_ENV }}" > frontend/.env
+
+          # Clean then deploy
+          docker compose down || true
+          docker compose up -d
+
+          # Verify deployment
+          sleep 10
+          docker ps
+          curl -I http://localhost:${{ env.FRONTEND_PORT }}
